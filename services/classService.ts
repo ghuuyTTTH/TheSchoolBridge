@@ -77,28 +77,38 @@ export const getClassByStudent = (studentId: string): Class | null => {
 
 export const joinClass = (inputCode: string, studentId: string): { success: boolean, error?: string, status?: 'joined' | 'pending' } => {
   const classes = getClasses();
-  const upperCode = inputCode.toUpperCase();
+  // Normalize input: trim and uppercase
+  const upperCode = (inputCode || '').trim().toUpperCase();
   
+  if (!upperCode) {
+    return { success: false, error: 'Please enter a valid code.' };
+  }
+
   // Try finding via Class Code
-  let clsIndex = classes.findIndex(c => c.classCode === upperCode);
+  let clsIndex = classes.findIndex(c => (c.classCode || '').toUpperCase() === upperCode);
   
   // Fallback to Teacher Code (School Code) if not found
   if (clsIndex === -1) {
     const users = getUsers();
-    const teacher = users.find(u => u.role === 'teacher' && u.schoolCode?.toUpperCase() === upperCode);
+    const teacher = users.find(u => u.role === 'teacher' && (u.schoolCode || '').toUpperCase() === upperCode);
     if (teacher) {
-      clsIndex = classes.findIndex(c => c.teacherId === teacher.id);
+      // Find the most recent class for this teacher
+      clsIndex = [...classes].reverse().findIndex(c => c.teacherId === teacher.id);
+      if (clsIndex !== -1) {
+        // Since we reversed, adjust index back to original
+        clsIndex = (classes.length - 1) - clsIndex;
+      }
     }
   }
   
   if (clsIndex === -1) {
-    return { success: false, error: 'Code not found. Check with your teacher.' };
+    return { success: false, error: 'Code not found. Please check with your teacher.' };
   }
   
   const cls = classes[clsIndex];
   
   if (cls.studentIds.includes(studentId)) {
-    return { success: false, error: 'You are already in this class.' };
+    return { success: true, status: 'joined', error: 'You are already in this class.' };
   }
   
   if (cls.pendingIds.includes(studentId)) {

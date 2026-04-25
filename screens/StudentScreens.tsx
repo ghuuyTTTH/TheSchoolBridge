@@ -54,10 +54,11 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
   const { joinClass } = classService;
 
   const handleSubmit = async () => {
-    if (code.length < 4) return;
+    const cleanCode = code.trim();
+    if (cleanCode.length < 2) return;
     
     setLoading(true);
-    const result = joinClass(code, user!.id);
+    const result = joinClass(cleanCode, user!.id);
     setLoading(false);
 
     if (result.success) {
@@ -99,7 +100,7 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
           {error && <p className="text-rose-600 text-xs font-black uppercase tracking-widest">{error}</p>}
           <button
             onClick={handleSubmit}
-            disabled={code.length < 4 || loading}
+            disabled={code.trim().length < 2 || loading}
             className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-lg active:scale-95 transition-all disabled:opacity-50"
           >
             {loading ? (language === 'ar' ? 'جاري التحقق...' : 'Verifying...') : (language === 'ar' ? 'انضم الآن' : 'Join Class')}
