@@ -1,0 +1,8 @@
+{
+  "name": "Remix: SchoolBridge",
+  "description": "A dynamic Omani school platform for teachers, students, and parents. Features guided teacher setup, real-time student dashboards with AI insights, and parent progress tracking.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
