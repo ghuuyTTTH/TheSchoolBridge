@@ -53,8 +53,8 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
   const { showToast } = useToast();
   const { joinClass } = classService;
 
-  const handleSubmit = async () => {
-    const cleanCode = code.trim();
+  const handleSubmit = async (overrideCode?: string) => {
+    const cleanCode = (overrideCode || code).trim();
     if (cleanCode.length < 2) return;
     
     setLoading(true);
@@ -70,6 +70,15 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
       setTimeout(() => setShaking(false), 500);
     }
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const joinCode = params.get('join');
+    if (joinCode) {
+      setCode(joinCode.toUpperCase());
+      handleSubmit(joinCode);
+    }
+  }, []);
 
   return (
     <div className="fixed inset-0 bg-white z-[200] flex flex-col p-8 overflow-y-auto">

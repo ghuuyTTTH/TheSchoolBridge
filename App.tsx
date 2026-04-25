@@ -16,10 +16,11 @@ const AppRoot: React.FC = () => {
 
   React.useEffect(() => {
     if (!loading) {
+      const search = window.location.search;
       if (!user) {
-        navigate('/auth');
+        navigate(`/auth${search}`);
       } else {
-        navigate(`/${user.role}/dashboard`);
+        navigate(`/${user.role}/dashboard${search}`);
       }
     }
   }, [user, loading, navigate]);

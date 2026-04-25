@@ -24,7 +24,8 @@ export const AuthFlow: React.FC = () => {
 
   useEffect(() => {
     if (user) {
-      navigate(`/${user.role}/dashboard`);
+      const search = window.location.search;
+      navigate(`/${user.role}/dashboard${search}`);
     }
   }, [user, navigate]);
 

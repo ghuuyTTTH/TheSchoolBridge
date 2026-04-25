@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   LogOut,
   Award,
-  Send
+  Send,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '../DataContext';
@@ -223,36 +224,64 @@ export const TeacherDashboard: React.FC<Props> = ({ onNavigate: parentOnNavigate
       {selectedClass && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="p-4 bg-amber-50 border-amber-100 flex items-center justify-between">
-            <div>
+            <div className="flex-1">
               <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{language === 'ar' ? 'رمز الفصل' : 'Class Code'}</p>
               <p className="text-xl font-mono font-black text-amber-900 tracking-widest mt-1">{selectedClass.classCode}</p>
             </div>
-            <button 
-              onClick={() => {
-                navigator.clipboard.writeText(selectedClass.classCode);
-                showToast(language === 'ar' ? 'تم نسخ الرمز!' : 'Code copied!');
-              }}
-              className="p-3 bg-white rounded-xl text-amber-600 shadow-sm border border-amber-200 active:scale-90 transition-all"
-            >
-              <Plus className="w-5 h-5 rotate-45" />
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedClass.classCode);
+                  showToast(language === 'ar' ? 'تم نسخ الرمز!' : 'Code copied!');
+                }}
+                title={language === 'ar' ? 'نسخ الرمز' : 'Copy Code'}
+                className="p-3 bg-white rounded-xl text-amber-600 shadow-sm border border-amber-200 active:scale-90 transition-all"
+              >
+                <Plus className="w-5 h-5 rotate-45" />
+              </button>
+              <button 
+                onClick={() => {
+                  const link = `${window.location.origin}/auth?join=${selectedClass.classCode}`;
+                  navigator.clipboard.writeText(link);
+                  showToast(language === 'ar' ? 'تم نسخ رابط الانضمام!' : 'Join link copied!');
+                }}
+                title={language === 'ar' ? 'نسخ الرابط' : 'Copy Link'}
+                className="p-3 bg-amber-600 rounded-xl text-white shadow-sm border border-amber-700 active:scale-90 transition-all"
+              >
+                <Share2 className="w-5 h-5" />
+              </button>
+            </div>
           </Card>
           
           {currentUser?.schoolCode && (
             <Card className="p-4 bg-blue-50 border-blue-100 flex items-center justify-between">
-              <div>
+              <div className="flex-1">
                 <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{language === 'ar' ? 'رمز المعلم' : 'Teacher Code'}</p>
                 <p className="text-xl font-mono font-black text-blue-900 tracking-widest mt-1">{currentUser.schoolCode}</p>
               </div>
-              <button 
-                onClick={() => {
-                  navigator.clipboard.writeText(currentUser.schoolCode!);
-                  showToast(language === 'ar' ? 'تم نسخ رمز المعلم!' : 'Teacher code copied!');
-                }}
-                className="p-3 bg-white rounded-xl text-blue-600 shadow-sm border border-blue-200 active:scale-90 transition-all"
-              >
-                <Plus className="w-5 h-5 rotate-45" />
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(currentUser.schoolCode!);
+                    showToast(language === 'ar' ? 'تم نسخ رمز المعلم!' : 'Teacher code copied!');
+                  }}
+                  title={language === 'ar' ? 'نسخ الرمز' : 'Copy Code'}
+                  className="p-3 bg-white rounded-xl text-blue-600 shadow-sm border border-blue-200 active:scale-90 transition-all"
+                >
+                  <Plus className="w-5 h-5 rotate-45" />
+                </button>
+                <button 
+                  onClick={() => {
+                    const link = `${window.location.origin}/auth?join=${currentUser.schoolCode}`;
+                    navigator.clipboard.writeText(link);
+                    showToast(language === 'ar' ? 'تم نسخ رابط الانضمام!' : 'Join link copied!');
+                  }}
+                  title={language === 'ar' ? 'نسخ الرابط' : 'Copy Link'}
+                  className="p-3 bg-blue-600 rounded-xl text-white shadow-sm border border-blue-700 active:scale-90 transition-all"
+                >
+                  <Share2 className="w-5 h-5" />
+                </button>
+              </div>
             </Card>
           )}
         </div>
