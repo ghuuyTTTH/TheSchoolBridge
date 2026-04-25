@@ -3,6 +3,19 @@ import { User, Class, Student, Badge, Notification, Message, HelpRequest, MoodLo
 import { useAuth } from './AuthContext';
 import * as classService from './services/classService';
 import { getUsers } from './services/authService';
+import { db } from './services/firebase';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  where, 
+  orderBy, 
+  doc, 
+  updateDoc, 
+  deleteDoc,
+  setDoc,
+  getDoc
+} from 'firebase/firestore';
 
 interface DataContextType {
   classes: Class[];
@@ -40,57 +53,73 @@ interface DataContextType {
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-const KEYS = {
-  MESSAGES: 'sb_messages',
-  MOODS: 'sb_moods',
-  HELP: 'sb_help',
-  PLANS: 'sb_plans',
-};
-
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
-  // Base state from localStorage
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
   const [moodLogs, setMoodLogs] = useState<MoodLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  
-  // Teacher specific state
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
 
-  // Load data on mount and refresh
+  // Real-time Listeners
   useEffect(() => {
-    const loadData = () => {
-      const savedMessages = localStorage.getItem(KEYS.MESSAGES);
-      setMessages(savedMessages ? JSON.parse(savedMessages) : []);
-      
-      const savedHelp = localStorage.getItem(KEYS.HELP);
-      setHelpRequests(savedHelp ? JSON.parse(savedHelp) : []);
-      
-      const savedMoods = localStorage.getItem(KEYS.MOODS);
-      setMoodLogs(savedMoods ? JSON.parse(savedMoods) : []);
+    if (!user) return;
+
+    const unsubClasses = onSnapshot(collection(db, 'classes'), (snapshot) => {
+      setClasses(snapshot.docs.map(doc => doc.data() as Class));
+    });
+
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setUsers(snapshot.docs.map(doc => doc.data() as User));
+    });
+
+    const unsubMessages = onSnapshot(
+      query(collection(db, 'messages'), orderBy('timestamp', 'asc')),
+      (snapshot) => {
+        setMessages(snapshot.docs.map(doc => doc.data() as Message));
+      }
+    );
+
+    const unsubHelp = onSnapshot(
+      query(collection(db, 'helpRequests'), orderBy('timestamp', 'desc')),
+      (snapshot) => {
+        setHelpRequests(snapshot.docs.map(doc => doc.data() as HelpRequest));
+      }
+    );
+
+    const unsubMoods = onSnapshot(
+      query(collection(db, 'moodLogs'), orderBy('timestamp', 'desc')),
+      (snapshot) => {
+        setMoodLogs(snapshot.docs.map(doc => doc.data() as MoodLog));
+      }
+    );
+
+    const unsubNotifs = onSnapshot(
+      query(collection(db, 'notifications'), where('to', '==', user.id), orderBy('timestamp', 'desc')),
+      (snapshot) => {
+        setNotifications(snapshot.docs.map(doc => doc.data() as Notification));
+      }
+    );
+
+    return () => {
+      unsubClasses();
+      unsubUsers();
+      unsubMessages();
+      unsubHelp();
+      unsubMoods();
+      unsubNotifs();
     };
-    loadData();
-  }, [refreshTrigger]);
-
-  const refreshData = () => setRefreshTrigger(prev => prev + 1);
-
-  // Persistence effects
-  useEffect(() => { if (messages.length > 0) localStorage.setItem(KEYS.MESSAGES, JSON.stringify(messages)); }, [messages]);
-  useEffect(() => { if (helpRequests.length > 0) localStorage.setItem(KEYS.HELP, JSON.stringify(helpRequests)); }, [helpRequests]);
-  useEffect(() => { if (moodLogs.length > 0) localStorage.setItem(KEYS.MOODS, JSON.stringify(moodLogs)); }, [moodLogs]);
-
-  // Scoping Logic
-  const allUsers = useMemo(() => getUsers(), [user, refreshTrigger]);
+  }, [user]);
 
   const teacherClasses = useMemo(() => {
     if (user?.role === 'teacher') {
-      return classService.getClassesByTeacher(user.id);
+      return classes.filter(c => c.teacherId === user.id);
     }
     return [];
-  }, [user, refreshTrigger]);
+  }, [user, classes]);
 
   // Set default selected class for teacher
   useEffect(() => {
@@ -101,42 +130,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const studentClass = useMemo(() => {
     if (user?.role === 'student') {
-      return classService.getClassByStudent(user.id);
+      return classes.find(c => c.studentIds.includes(user.id)) || null;
     }
     return null;
-  }, [user, refreshTrigger]);
+  }, [user, classes]);
 
   const classmates = useMemo(() => {
     if (user?.role === 'student' && studentClass) {
-      return allUsers.filter(u => studentClass.studentIds.includes(u.id) && u.id !== user.id);
+      return users.filter(u => studentClass.studentIds.includes(u.id) && u.id !== user.id);
     }
     return [];
-  }, [user, studentClass, allUsers]);
+  }, [user, studentClass, users]);
 
   const classTeacher = useMemo(() => {
     if (user?.role === 'student' && studentClass) {
-      return allUsers.find(u => u.id === studentClass.teacherId) || null;
+      return users.find(u => u.id === studentClass.teacherId) || null;
     }
     return null;
-  }, [user, studentClass, allUsers]);
+  }, [user, studentClass, users]);
 
   const currentChild = useMemo(() => {
     if (user?.role === 'parent' && user.childStudentId) {
-      return allUsers.find(u => u.studentId === user.childStudentId);
+      return users.find(u => u.studentId === user.childStudentId);
     }
     return null;
-  }, [user, allUsers]);
+  }, [user, users]);
 
   // Filtered Data Views
   const myStudents = useMemo(() => {
     if (user?.role === 'teacher' && selectedClassId) {
       const cls = teacherClasses.find(c => c.id === selectedClassId);
       if (cls) {
-        return allUsers.filter(u => cls.studentIds.includes(u.id));
+        return users.filter(u => cls.studentIds.includes(u.id));
       }
     }
     return [];
-  }, [user, selectedClassId, teacherClasses, allUsers]);
+  }, [user, selectedClassId, teacherClasses, users]);
 
   const myMessages = useMemo(() => {
     if (!user) return [];
@@ -177,21 +206,23 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Actions
   const sendMessage = async (toId: string, text: string) => {
     if (!user) return;
+    const id = crypto.randomUUID();
     const newMsg: Message = {
-      id: crypto.randomUUID(),
+      id,
       senderId: user.id,
       receiverId: toId,
       text,
       timestamp: new Date().toISOString(),
       isRead: false,
     };
-    setMessages(prev => [...prev, newMsg]);
+    await setDoc(doc(db, 'messages', id), newMsg);
   };
 
   const sendHelpRequest = async (subject: string, message: string, isAnonymous: boolean) => {
     if (!user || user.role !== 'student') return;
+    const id = crypto.randomUUID();
     const newRequest: HelpRequest = {
-      id: crypto.randomUUID(),
+      id,
       studentId: user.id,
       subject,
       message,
@@ -199,61 +230,59 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isAnonymous,
       status: 'pending',
     };
-    setHelpRequests(prev => [...prev, newRequest]);
+    await setDoc(doc(db, 'helpRequests', id), newRequest);
   };
 
   const resolveHelpRequest = async (requestId: string) => {
-    setHelpRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'resolved' } : r));
+    await updateDoc(doc(db, 'helpRequests', requestId), { status: 'resolved' });
   };
 
   const addMood = async (mood: Mood) => {
     if (!user) return;
+    const id = crypto.randomUUID();
     const newLog: MoodLog = {
-      id: crypto.randomUUID(),
+      id,
       userId: user.id,
       mood,
       timestamp: Date.now(),
     };
-    setMoodLogs(prev => [...prev, newLog]);
+    await setDoc(doc(db, 'moodLogs', id), newLog);
   };
 
   const markNotificationRead = async (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    await updateDoc(doc(db, 'notifications', id), { read: true });
   };
 
   const clearNotificationsByType = async (type: Notification['type']) => {
-    setNotifications(prev => prev.filter(n => n.type !== type));
+    const toClear = notifications.filter(n => n.type === type);
+    for (const n of toClear) {
+      await deleteDoc(doc(db, 'notifications', n.id));
+    }
   };
 
   const createClass = async (className: string) => {
     if (!user || user.role !== 'teacher') throw new Error('Unauthorized');
-    const newClass = classService.createClass(user.id, className);
-    refreshData();
+    const newClass = await classService.createClass(user.id, className);
     setSelectedClassId(newClass.id);
     return newClass;
   };
 
   const updateStudent = async (updatedStudent: any) => {
-    // In this lab, we use localStorage for student progress if not in authService
-    const key = `student_progress_${updatedStudent.id}`;
-    localStorage.setItem(key, JSON.stringify(updatedStudent));
-    refreshData();
+    await setDoc(doc(db, 'studentProgress', updatedStudent.id), updatedStudent, { merge: true });
   };
 
   const awardBadge = async (studentId: string, badge: Badge) => {
-    const studentProgressKey = `student_progress_${studentId}`;
-    const saved = localStorage.getItem(studentProgressKey);
-    const data = saved ? JSON.parse(saved) : { badges: [] };
-    const updated = {
-      ...data,
-      id: studentId,
-      badges: [...(data.badges || []), { ...badge, unlockedAt: new Date().toISOString() }]
-    };
-    localStorage.setItem(studentProgressKey, JSON.stringify(updated));
+    const progressRef = doc(db, 'studentProgress', studentId);
+    const progressSnap = await getDoc(progressRef);
+    const data = progressSnap.exists() ? progressSnap.data() : { badges: [] };
     
-    // Also notify student
+    await setDoc(progressRef, {
+      badges: [...(data.badges || []), { ...badge, unlockedAt: new Date().toISOString() }]
+    }, { merge: true });
+    
+    const notifId = crypto.randomUUID();
     const newNotif: Notification = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: notifId,
       to: studentId,
       title: 'New Badge Awarded! 🏆',
       message: `You earned the ${badge.name} badge!`,
@@ -261,13 +290,14 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: Date.now(),
       read: false
     };
-    setNotifications(prev => [newNotif, ...prev]);
-    refreshData();
+    await setDoc(doc(db, 'notifications', notifId), newNotif);
   };
+
+  const refreshData = () => {};
 
   return (
     <DataContext.Provider value={{
-      classes: classService.getClasses(),
+      classes,
       myStudents,
       myMessages,
       myHelpRequests,

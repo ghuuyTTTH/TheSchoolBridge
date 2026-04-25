@@ -1,116 +1,78 @@
 
 import { User, Session, Role } from '../types';
+import { auth, db } from './firebase';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword, 
+  signOut as firebaseSignOut,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 
-const USERS_KEY = 'sb_users';
-const SESSION_KEY = 'sb_session';
-
-export const getUsers = (): User[] => {
-  try {
-    const data = localStorage.getItem(USERS_KEY);
-    if (!data) return [];
-    return JSON.parse(data) as User[];
-  } catch (e) {
-    console.error('Error parsing sb_users', e);
-    return [];
-  }
+export const getUsers = async (): Promise<User[]> => {
+  const querySnapshot = await getDocs(collection(db, 'users'));
+  return querySnapshot.docs.map(doc => doc.data() as User);
 };
 
-export const saveUsers = (users: User[]): void => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-};
-
-export const signUp = (
+export const signUp = async (
   name: string,
   email: string,
   password: string,
   role: Role,
   extraField: string
-): { success: boolean; error?: string; user?: User } => {
+): Promise<{ success: boolean; error?: string; user?: User }> => {
   const trimmedEmail = email.trim().toLowerCase();
-  const users = getUsers();
 
-  if (users.some(u => u.email === trimmedEmail)) {
-    return { success: false, error: 'An account with this email already exists.' };
-  }
-
-  const user: User = {
-    id: crypto.randomUUID(),
-    name,
-    email: trimmedEmail,
-    passwordHash: btoa(trimmedEmail + ':' + password),
-    role,
-    studentId: role === 'student' ? extraField : null,
-    schoolCode: role === 'teacher' ? extraField : null,
-    childStudentId: role === 'parent' ? extraField : null,
-    createdAt: Date.now(),
-  };
-
-  users.push(user);
-  saveUsers(users);
-
-  const session: Session = {
-    userId: user.id,
-    role: user.role,
-    name: user.name,
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  };
-
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
-  return { success: true, user };
-};
-
-export const signIn = (email: string, password: string): { success: boolean; error?: string; user?: User } => {
-  const trimmedEmail = email.trim().toLowerCase();
-  const users = getUsers();
-  const user = users.find(u => u.email === trimmedEmail);
-
-  if (!user) {
-    return { success: false, error: 'No account found with that email.' };
-  }
-
-  const hash = btoa(trimmedEmail + ':' + password);
-  if (user.passwordHash !== hash) {
-    return { success: false, error: 'Incorrect password.' };
-  }
-
-  const session: Session = {
-    userId: user.id,
-    role: user.role,
-    name: user.name,
-    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
-  };
-
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-
-  return { success: true, user };
-};
-
-export const signOut = (): void => {
-  localStorage.removeItem(SESSION_KEY);
-};
-
-export const getSession = (): Session | null => {
   try {
-    const data = localStorage.getItem(SESSION_KEY);
-    if (!data) return null;
-    const session = JSON.parse(data) as Session;
-    
-    if (session.expiresAt < Date.now()) {
-      localStorage.removeItem(SESSION_KEY);
-      return null;
-    }
-    
-    return session;
-  } catch (e) {
-    localStorage.removeItem(SESSION_KEY);
-    return null;
+    const userCredential = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
+    const firebaseUser = userCredential.user;
+
+    const user: User = {
+      id: firebaseUser.uid,
+      name,
+      email: trimmedEmail,
+      passwordHash: '', // Not needed with Firebase Auth
+      role,
+      studentId: role === 'student' ? extraField : null,
+      schoolCode: role === 'teacher' ? extraField : null,
+      childStudentId: role === 'parent' ? extraField : null,
+      createdAt: Date.now(),
+    };
+
+    await setDoc(doc(db, 'users', user.id), user);
+
+    return { success: true, user };
+  } catch (error: any) {
+    return { success: false, error: error.message };
   }
 };
 
-export const getCurrentUser = (): User | null => {
-  const session = getSession();
-  if (!session) return null;
-  const users = getUsers();
-  return users.find(u => u.id === session.userId) || null;
+export const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string; user?: User }> => {
+  const trimmedEmail = email.trim().toLowerCase();
+  
+  try {
+    const userCredential = await signInWithEmailAndPassword(auth, trimmedEmail, password);
+    const firebaseUser = userCredential.user;
+    
+    const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+    if (!userDoc.exists()) {
+      return { success: false, error: 'User data not found.' };
+    }
+
+    return { success: true, user: userDoc.data() as User };
+  } catch (error: any) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+};
+
+export const signOut = async (): Promise<void> => {
+  await firebaseSignOut(auth);
+};
+
+export const getCurrentUser = async (): Promise<User | null> => {
+  const firebaseUser = auth.currentUser;
+  if (!firebaseUser) return null;
+  
+  const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+  return userDoc.exists() ? (userDoc.data() as User) : null;
 };

@@ -58,7 +58,7 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
     if (cleanCode.length < 2) return;
     
     setLoading(true);
-    const result = joinClass(cleanCode, user!.id);
+    const result = await joinClass(cleanCode, user!.id);
     setLoading(false);
 
     if (result.success) {

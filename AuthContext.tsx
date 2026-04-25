@@ -2,60 +2,62 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User, Session, Role } from './types';
 import * as authService from './services/authService';
+import { auth, db } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   loading: boolean;
   signUp: (name: string, email: string, password: string, role: Role, extraField: string) => Promise<{ success: boolean; error?: string }>;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const initAuth = () => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoading(true);
-      const currentSession = authService.getSession();
-      if (currentSession) {
-        setSession(currentSession);
-        const currentUser = authService.getCurrentUser();
-        setUser(currentUser);
+      if (firebaseUser) {
+        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+        if (userDoc.exists()) {
+          setUser(userDoc.data() as User);
+        } else {
+          setUser(null);
+        }
+      } else {
+        setUser(null);
       }
       setLoading(false);
-    };
+    });
 
-    initAuth();
+    return () => unsubscribe();
   }, []);
 
   const signUp = async (name: string, email: string, password: string, role: Role, extraField: string) => {
-    const result = authService.signUp(name, email, password, role, extraField);
+    const result = await authService.signUp(name, email, password, role, extraField);
     if (result.success && result.user) {
       setUser(result.user);
-      setSession(authService.getSession());
     }
     return { success: result.success, error: result.error };
   };
 
   const signIn = async (email: string, password: string) => {
-    const result = authService.signIn(email, password);
+    const result = await authService.signIn(email, password);
     if (result.success && result.user) {
       setUser(result.user);
-      setSession(authService.getSession());
     }
     return { success: result.success, error: result.error };
   };
 
-  const signOut = () => {
-    authService.signOut();
+  const signOut = async () => {
+    await authService.signOut();
     setUser(null);
-    setSession(null);
   };
 
   if (loading) {
@@ -67,7 +69,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

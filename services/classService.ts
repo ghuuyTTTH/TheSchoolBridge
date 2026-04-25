@@ -1,29 +1,34 @@
+
 import { Class, User } from '../types';
-import { getUsers } from './authService';
+import { db } from './firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  query, 
+  where, 
+  updateDoc, 
+  arrayUnion, 
+  arrayRemove, 
+  deleteDoc,
+  limit,
+  orderBy
+} from 'firebase/firestore';
 
-const CLASSES_KEY = 'sb_classes';
-
-export const getClasses = (): Class[] => {
-  try {
-    const data = localStorage.getItem(CLASSES_KEY);
-    if (!data) return [];
-    return JSON.parse(data) as Class[];
-  } catch (e) {
-    console.error('Error parsing sb_classes', e);
-    return [];
-  }
+export const getClasses = async (): Promise<Class[]> => {
+  const querySnapshot = await getDocs(collection(db, 'classes'));
+  return querySnapshot.docs.map(doc => doc.data() as Class);
 };
 
-export const saveClasses = (classes: Class[]): void => {
-  localStorage.setItem(CLASSES_KEY, JSON.stringify(classes));
-};
-
-export const generateClassCode = (): string => {
-  const classes = getClasses();
+export const generateClassCode = async (): Promise<string> => {
   let attempts = 0;
   while (attempts < 10) {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    if (!classes.some(c => c.classCode === code)) {
+    const q = query(collection(db, 'classes'), where('classCode', '==', code));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
       return code;
     }
     attempts++;
@@ -31,81 +36,66 @@ export const generateClassCode = (): string => {
   return 'ERR' + Math.random().toString(36).substring(2, 5).toUpperCase();
 };
 
-export const createClass = (teacherId: string, className: string): Class => {
-  const classes = getClasses();
+export const createClass = async (teacherId: string, className: string): Promise<Class> => {
+  const classCode = await generateClassCode();
+  const id = crypto.randomUUID();
   const newClass: Class = {
-    id: crypto.randomUUID(),
+    id,
     teacherId,
-    classCode: generateClassCode(),
+    classCode,
     className,
     createdAt: Date.now(),
     studentIds: [],
     pendingIds: [],
   };
-  classes.push(newClass);
-  saveClasses(classes);
+  await setDoc(doc(db, 'classes', id), newClass);
   return newClass;
 };
 
-export const getClassByCode = (code: string): Class | null => {
-  const classes = getClasses();
-  const upperCode = code.toUpperCase();
+export const getClassByCode = async (code: string): Promise<Class | null> => {
+  const upperCode = (code || '').trim().toUpperCase();
+  if (!upperCode) return null;
   
   // Try Class Code first
-  const clsByCode = classes.find(c => c.classCode === upperCode);
-  if (clsByCode) return clsByCode;
+  const q = query(collection(db, 'classes'), where('classCode', '==', upperCode), limit(1));
+  const snapshot = await getDocs(q);
+  if (!snapshot.empty) {
+    return snapshot.docs[0].data() as Class;
+  }
 
   // Fallback: Try Teacher School Code
-  const users = getUsers();
-  const teacher = users.find(u => u.role === 'teacher' && u.schoolCode?.toUpperCase() === upperCode);
-  if (teacher) {
-    return classes.find(c => c.teacherId === teacher.id) || null;
+  const teacherQ = query(collection(db, 'users'), where('role', '==', 'teacher'), where('schoolCode', '==', upperCode), limit(1));
+  const teacherSnapshot = await getDocs(teacherQ);
+  if (!teacherSnapshot.empty) {
+    const teacherId = teacherSnapshot.docs[0].id;
+    const classQ = query(collection(db, 'classes'), where('teacherId', '==', teacherId), orderBy('createdAt', 'desc'), limit(1));
+    const classSnapshot = await getDocs(classQ);
+    if (!classSnapshot.empty) {
+      return classSnapshot.docs[0].data() as Class;
+    }
   }
 
   return null;
 };
 
-export const getClassesByTeacher = (teacherId: string): Class[] => {
-  const classes = getClasses();
-  return classes.filter(c => c.teacherId === teacherId);
+export const getClassesByTeacher = async (teacherId: string): Promise<Class[]> => {
+  const q = query(collection(db, 'classes'), where('teacherId', '==', teacherId));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => doc.data() as Class);
 };
 
-export const getClassByStudent = (studentId: string): Class | null => {
-  const classes = getClasses();
-  return classes.find(c => c.studentIds.includes(studentId)) || null;
+export const getClassByStudent = async (studentId: string): Promise<Class | null> => {
+  const q = query(collection(db, 'classes'), where('studentIds', 'array-contains', studentId), limit(1));
+  const snapshot = await getDocs(q);
+  return snapshot.empty ? null : (snapshot.docs[0].data() as Class);
 };
 
-export const joinClass = (inputCode: string, studentId: string): { success: boolean, error?: string, status?: 'joined' | 'pending' } => {
-  const classes = getClasses();
-  // Normalize input: trim and uppercase
-  const upperCode = (inputCode || '').trim().toUpperCase();
+export const joinClass = async (inputCode: string, studentId: string): Promise<{ success: boolean, error?: string, status?: 'joined' | 'pending' }> => {
+  const cls = await getClassByCode(inputCode);
   
-  if (!upperCode) {
-    return { success: false, error: 'Please enter a valid code.' };
-  }
-
-  // Try finding via Class Code
-  let clsIndex = classes.findIndex(c => (c.classCode || '').toUpperCase() === upperCode);
-  
-  // Fallback to Teacher Code (School Code) if not found
-  if (clsIndex === -1) {
-    const users = getUsers();
-    const teacher = users.find(u => u.role === 'teacher' && (u.schoolCode || '').toUpperCase() === upperCode);
-    if (teacher) {
-      // Find the most recent class for this teacher
-      clsIndex = [...classes].reverse().findIndex(c => c.teacherId === teacher.id);
-      if (clsIndex !== -1) {
-        // Since we reversed, adjust index back to original
-        clsIndex = (classes.length - 1) - clsIndex;
-      }
-    }
-  }
-  
-  if (clsIndex === -1) {
+  if (!cls) {
     return { success: false, error: 'Code not found. Please check with your teacher.' };
   }
-  
-  const cls = classes[clsIndex];
   
   if (cls.studentIds.includes(studentId)) {
     return { success: true, status: 'joined', error: 'You are already in this class.' };
@@ -115,32 +105,26 @@ export const joinClass = (inputCode: string, studentId: string): { success: bool
     return { success: false, error: 'Your request is already pending approval.' };
   }
 
-  cls.studentIds.push(studentId);
-  saveClasses(classes);
+  const classRef = doc(db, 'classes', cls.id);
+  await updateDoc(classRef, {
+    studentIds: arrayUnion(studentId)
+  });
   
   return { success: true, status: 'joined' };
 };
 
-export const approveStudent = (classId: string, studentId: string): void => {
-  const classes = getClasses();
-  const clsIndex = classes.findIndex(c => c.id === classId);
-  if (clsIndex === -1) return;
-  
-  const cls = classes[clsIndex];
-  cls.pendingIds = cls.pendingIds.filter(id => id !== studentId);
-  if (!cls.studentIds.includes(studentId)) {
-    cls.studentIds.push(studentId);
-  }
-  saveClasses(classes);
+export const approveStudent = async (classId: string, studentId: string): Promise<void> => {
+  const classRef = doc(db, 'classes', classId);
+  await updateDoc(classRef, {
+    pendingIds: arrayRemove(studentId),
+    studentIds: arrayUnion(studentId)
+  });
 };
 
-export const removeStudent = (classId: string, studentId: string): void => {
-  const classes = getClasses();
-  const clsIndex = classes.findIndex(c => c.id === classId);
-  if (clsIndex === -1) return;
-  
-  const cls = classes[clsIndex];
-  cls.studentIds = cls.studentIds.filter(id => id !== studentId);
-  cls.pendingIds = cls.pendingIds.filter(id => id !== studentId);
-  saveClasses(classes);
+export const removeStudent = async (classId: string, studentId: string): Promise<void> => {
+  const classRef = doc(db, 'classes', classId);
+  await updateDoc(classRef, {
+    studentIds: arrayRemove(studentId),
+    pendingIds: arrayRemove(studentId)
+  });
 };
