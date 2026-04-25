@@ -46,38 +46,18 @@ interface Props {
 
 export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void, onSignOut: () => void }> = ({ language, onJoined, onSignOut }) => {
   const { user } = useAuth();
-  const [code, setCode] = useState(['', '', '', '', '', '']);
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [shaking, setShaking] = useState(false);
-  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
   const { showToast } = useToast();
   const { joinClass } = classService;
 
-  const handleChange = (index: number, value: string) => {
-    if (value.length > 1) value = value[value.length - 1];
-    const newCode = [...code];
-    newCode[index] = value.toUpperCase();
-    setCode(newCode);
-    setError('');
-
-    if (value && index < 5) {
-      inputsRef.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backspace' && !code[index] && index > 0) {
-      inputsRef.current[index - 1]?.focus();
-    }
-  };
-
   const handleSubmit = async () => {
-    const fullCode = code.join('');
-    if (fullCode.length < 6) return;
+    if (code.length < 4) return;
     
     setLoading(true);
-    const result = joinClass(fullCode, user!.id);
+    const result = joinClass(code, user!.id);
     setLoading(false);
 
     if (result.success) {
@@ -98,29 +78,28 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
              <Users className="w-10 h-10" />
           </div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">{language === 'ar' ? 'مرحباً بك في جسر المدرسة' : 'Welcome to SchoolBridge'}</h2>
-          <p className="text-slate-500 font-medium">{language === 'ar' ? 'أدخل الرمز المكون من 6 أرقام للبدء' : 'Enter the 6-character code your teacher gave you to get started.'}</p>
+          <p className="text-slate-500 font-medium">{language === 'ar' ? 'أدخل رمز المعلم أو رمز الفصل للبدء' : 'Enter the Teacher Code or Class Code to get started.'}</p>
         </div>
 
         <div className={`space-y-6 w-full ${shaking ? 'animate-shake' : ''}`}>
-          <div className="flex gap-2 justify-center">
-            {code.map((char, i) => (
-              <input
-                key={i}
-                ref={el => inputsRef.current[i] = el}
-                type="text"
-                value={char}
-                onChange={e => handleChange(i, e.target.value)}
-                onKeyDown={e => handleKeyDown(i, e)}
-                className={`w-12 h-16 bg-slate-50 border-2 rounded-2xl text-center text-2xl font-black focus:ring-4 focus:ring-blue-100 outline-none transition-all ${
-                  error ? 'border-rose-300 bg-rose-50' : 'border-slate-100 focus:border-blue-500'
-                }`}
-              />
-            ))}
+          <div className="flex flex-col gap-4">
+            <input
+              type="text"
+              value={code}
+              onChange={e => {
+                setCode(e.target.value.toUpperCase());
+                setError('');
+              }}
+              placeholder={language === 'ar' ? 'مثال: OMAN-10' : 'e.g. CLASS-10'}
+              className={`w-full bg-slate-50 border-2 rounded-3xl py-6 text-center text-3xl font-black focus:ring-4 focus:ring-blue-100 outline-none transition-all tracking-widest ${
+                error ? 'border-rose-300 bg-rose-50' : 'border-slate-100 focus:border-blue-500'
+              }`}
+            />
           </div>
           {error && <p className="text-rose-600 text-xs font-black uppercase tracking-widest">{error}</p>}
           <button
             onClick={handleSubmit}
-            disabled={code.some(c => !c) || loading}
+            disabled={code.length < 4 || loading}
             className="w-full bg-blue-600 text-white font-black py-5 rounded-3xl shadow-lg active:scale-95 transition-all disabled:opacity-50"
           >
             {loading ? (language === 'ar' ? 'جاري التحقق...' : 'Verifying...') : (language === 'ar' ? 'انضم الآن' : 'Join Class')}

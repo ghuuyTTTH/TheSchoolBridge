@@ -221,21 +221,41 @@ export const TeacherDashboard: React.FC<Props> = ({ onNavigate: parentOnNavigate
 
       {/* Class Code Banner */}
       {selectedClass && (
-        <Card className="p-4 bg-amber-50 border-amber-100 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{language === 'ar' ? 'رمز الفصل للطلاب' : 'Class Code for Students'}</p>
-            <p className="text-xl font-mono font-black text-amber-900 tracking-widest mt-1">{selectedClass.classCode}</p>
-          </div>
-          <button 
-            onClick={() => {
-              navigator.clipboard.writeText(selectedClass.classCode);
-              showToast(language === 'ar' ? 'تم نسخ الرمز!' : 'Code copied!');
-            }}
-            className="p-3 bg-white rounded-xl text-amber-600 shadow-sm border border-amber-200 active:scale-90 transition-all"
-          >
-            <Plus className="w-5 h-5 rotate-45" />
-          </button>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="p-4 bg-amber-50 border-amber-100 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">{language === 'ar' ? 'رمز الفصل' : 'Class Code'}</p>
+              <p className="text-xl font-mono font-black text-amber-900 tracking-widest mt-1">{selectedClass.classCode}</p>
+            </div>
+            <button 
+              onClick={() => {
+                navigator.clipboard.writeText(selectedClass.classCode);
+                showToast(language === 'ar' ? 'تم نسخ الرمز!' : 'Code copied!');
+              }}
+              className="p-3 bg-white rounded-xl text-amber-600 shadow-sm border border-amber-200 active:scale-90 transition-all"
+            >
+              <Plus className="w-5 h-5 rotate-45" />
+            </button>
+          </Card>
+          
+          {currentUser?.schoolCode && (
+            <Card className="p-4 bg-blue-50 border-blue-100 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{language === 'ar' ? 'رمز المعلم' : 'Teacher Code'}</p>
+                <p className="text-xl font-mono font-black text-blue-900 tracking-widest mt-1">{currentUser.schoolCode}</p>
+              </div>
+              <button 
+                onClick={() => {
+                  navigator.clipboard.writeText(currentUser.schoolCode!);
+                  showToast(language === 'ar' ? 'تم نسخ رمز المعلم!' : 'Teacher code copied!');
+                }}
+                className="p-3 bg-white rounded-xl text-blue-600 shadow-sm border border-blue-200 active:scale-90 transition-all"
+              >
+                <Plus className="w-5 h-5 rotate-45" />
+              </button>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* AI Insights Bar */}

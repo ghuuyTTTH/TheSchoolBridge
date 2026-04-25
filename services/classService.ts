@@ -1,4 +1,5 @@
-import { Class } from '../types';
+import { Class, User } from '../types';
+import { getUsers } from './authService';
 
 const CLASSES_KEY = 'sb_classes';
 
@@ -48,7 +49,20 @@ export const createClass = (teacherId: string, className: string): Class => {
 
 export const getClassByCode = (code: string): Class | null => {
   const classes = getClasses();
-  return classes.find(c => c.classCode === code.toUpperCase()) || null;
+  const upperCode = code.toUpperCase();
+  
+  // Try Class Code first
+  const clsByCode = classes.find(c => c.classCode === upperCode);
+  if (clsByCode) return clsByCode;
+
+  // Fallback: Try Teacher School Code
+  const users = getUsers();
+  const teacher = users.find(u => u.role === 'teacher' && u.schoolCode?.toUpperCase() === upperCode);
+  if (teacher) {
+    return classes.find(c => c.teacherId === teacher.id) || null;
+  }
+
+  return null;
 };
 
 export const getClassesByTeacher = (teacherId: string): Class[] => {
@@ -61,12 +75,24 @@ export const getClassByStudent = (studentId: string): Class | null => {
   return classes.find(c => c.studentIds.includes(studentId)) || null;
 };
 
-export const joinClass = (classCode: string, studentId: string): { success: boolean, error?: string, status?: 'joined' | 'pending' } => {
+export const joinClass = (inputCode: string, studentId: string): { success: boolean, error?: string, status?: 'joined' | 'pending' } => {
   const classes = getClasses();
-  const clsIndex = classes.findIndex(c => c.classCode === classCode.toUpperCase());
+  const upperCode = inputCode.toUpperCase();
+  
+  // Try finding via Class Code
+  let clsIndex = classes.findIndex(c => c.classCode === upperCode);
+  
+  // Fallback to Teacher Code (School Code) if not found
+  if (clsIndex === -1) {
+    const users = getUsers();
+    const teacher = users.find(u => u.role === 'teacher' && u.schoolCode?.toUpperCase() === upperCode);
+    if (teacher) {
+      clsIndex = classes.findIndex(c => c.teacherId === teacher.id);
+    }
+  }
   
   if (clsIndex === -1) {
-    return { success: false, error: 'Class not found. Check the code with your teacher.' };
+    return { success: false, error: 'Code not found. Check with your teacher.' };
   }
   
   const cls = classes[clsIndex];
@@ -79,7 +105,6 @@ export const joinClass = (classCode: string, studentId: string): { success: bool
     return { success: false, error: 'Your request is already pending approval.' };
   }
 
-  // Add studentId to studentIds directly (no approval gate by default as per spec)
   cls.studentIds.push(studentId);
   saveClasses(classes);
   
