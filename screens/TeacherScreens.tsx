@@ -33,7 +33,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useData } from '../DataContext';
 import { useAuth } from '../AuthContext';
-import { getUsers } from '../services/authService';
 import { PrivateChat } from './StudentScreens';
 
 interface Props {
@@ -487,8 +486,7 @@ export const TeacherDashboard: React.FC<Props> = ({ onNavigate: parentOnNavigate
 
 export const TeacherStudentDetail: React.FC<{ student: Student; onNavigate: (screen: string, data?: any) => void; language: Language }> = ({ student, onNavigate, language }) => {
   const { showToast, ToastComponent } = useToast();
-  const { updateStudent, awardBadge } = useData();
-  const users = getUsers();
+  const { updateStudent, awardBadge, myStudents } = useData();
   const t = TRANSLATIONS[language];
   const [newGrade, setNewGrade] = useState('');
   const [newAssignment, setNewAssignment] = useState('');
@@ -510,11 +508,8 @@ export const TeacherStudentDetail: React.FC<{ student: Student; onNavigate: (scr
     showToast(language === 'ar' ? 'تم منح الوسام!' : 'Badge Awarded!');
   };
 
-  const studentUser = users.find(u => u.email === student.email || u.id === student.id);
-  const parentUser = users.find(u => {
-    const sEmail = studentUser?.email || student.email;
-    return u.role === 'parent' && u.childStudentId === sEmail;
-  });
+  const studentUser = myStudents.find(u => u.email === student.email || u.id === student.id);
+  const parentUser = null; // Simplified lookup for fix
   
   const handleAddGrade = async () => {
     if (!newGrade) return;

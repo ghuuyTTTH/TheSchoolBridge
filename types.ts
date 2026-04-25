@@ -31,6 +31,7 @@ export interface User {
   schoolCode: string | null;    // set for teachers
   childStudentId: string | null;// set for parents
   createdAt: number;
+  classes?: string[];           // IDs of classes joined
 }
 
 export interface Session {

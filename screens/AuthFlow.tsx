@@ -22,12 +22,30 @@ export const AuthFlow: React.FC = () => {
   const [submissionError, setSubmissionError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Capture join code from URL
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+
   useEffect(() => {
-    if (user) {
-      const search = window.location.search;
-      navigate(`/${user.role}/dashboard${search}`);
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('join');
+    if (code) {
+      setJoinCode(code.toUpperCase());
+      // If we have a join code, default to signup for students if they don't have an account
+      // but let them decide. Actually, just pre-fill if possible.
     }
-  }, [user, navigate]);
+  }, []);
+
+  useEffect(() => {
+    const handleNavigation = async () => {
+      if (user) {
+        if (joinCode && user.role === 'student') {
+          await import('../services/classService').then(m => m.joinClass(joinCode, user.id));
+        }
+        navigate(`/${user.role}/dashboard`);
+      }
+    };
+    handleNavigation();
+  }, [user, navigate, joinCode]);
 
   const validateEmail = (email: string) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

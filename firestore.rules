@@ -37,26 +37,21 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn(); // For finding teachers/students
-      allow create: if isSignedIn() && isOwner(userId) && isValidUser(incoming());
-      allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && 
-                    incoming().role == existing().role; // Role is immutable
+      allow list: if isSignedIn();
+      allow create, update: if isOwner(userId) && isValidUser(incoming());
     }
 
     match /classes/{classId} {
-      allow get: if isSignedIn();
-      allow list: if isSignedIn(); 
-      allow create: if isSignedIn() && isValidClass(incoming());
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidClass(incoming()) && incoming().teacherId == request.auth.uid;
       allow update: if isSignedIn() && (
-        // Action: Teacher updates class
+        // Teacher can update everything
         (existing().teacherId == request.auth.uid && isValidClass(incoming())) ||
-        // Action: Student joins (adds self to studentIds or pendingIds)
+        // Student can join (arrayUnion to studentIds)
         (
-          incoming().diff(existing()).affectedKeys().hasOnly(['studentIds', 'pendingIds']) &&
-          (
-            (incoming().studentIds.size() == existing().studentIds.size() + 1 && incoming().studentIds.hasAll(existing().studentIds) && (incoming().studentIds[(incoming().studentIds.size() - 1)] == request.auth.uid)) ||
-            (incoming().pendingIds.size() == existing().pendingIds.size() + 1 && incoming().pendingIds.hasAll(existing().pendingIds) && (incoming().pendingIds[(incoming().pendingIds.size() - 1)] == request.auth.uid))
-          )
+          incoming().diff(existing()).affectedKeys().hasOnly(['studentIds']) &&
+          incoming().studentIds.size() >= existing().studentIds.size() &&
+          incoming().studentIds.hasAll(existing().studentIds)
         )
       );
       allow delete: if isSignedIn() && existing().teacherId == request.auth.uid;

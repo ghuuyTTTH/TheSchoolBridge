@@ -91,26 +91,38 @@ export const getClassByStudent = async (studentId: string): Promise<Class | null
 };
 
 export const joinClass = async (inputCode: string, studentId: string): Promise<{ success: boolean, error?: string, status?: 'joined' | 'pending' }> => {
-  const cls = await getClassByCode(inputCode);
+  const upperCode = (inputCode || '').trim().toUpperCase();
+  if (!upperCode) return { success: false, error: 'Please enter a valid code.' };
+
+  const cls = await getClassByCode(upperCode);
   
   if (!cls) {
-    return { success: false, error: 'Code not found. Please check with your teacher.' };
+    return { success: false, error: 'Class not found. Please check with your teacher.' };
   }
   
   if (cls.studentIds.includes(studentId)) {
-    return { success: true, status: 'joined', error: 'You are already in this class.' };
+    return { success: true, status: 'joined' }; // Silently succeed if already in
   }
   
-  if (cls.pendingIds.includes(studentId)) {
-    return { success: false, error: 'Your request is already pending approval.' };
-  }
+  try {
+    const classRef = doc(db, 'classes', cls.id);
+    const userRef = doc(db, 'users', studentId);
 
-  const classRef = doc(db, 'classes', cls.id);
-  await updateDoc(classRef, {
-    studentIds: arrayUnion(studentId)
-  });
-  
-  return { success: true, status: 'joined' };
+    // Update class student list
+    await updateDoc(classRef, {
+      studentIds: arrayUnion(studentId)
+    });
+
+    // Update user class list
+    await updateDoc(userRef, {
+      classes: arrayUnion(cls.id)
+    });
+    
+    return { success: true, status: 'joined' };
+  } catch (error: any) {
+    console.error('Error joining class:', error);
+    return { success: false, error: 'Failed to join class. Please try again.' };
+  }
 };
 
 export const approveStudent = async (classId: string, studentId: string): Promise<void> => {

@@ -54,20 +54,26 @@ export const JoinClassFlow: React.FC<{ language: Language, onJoined: () => void,
   const { joinClass } = classService;
 
   const handleSubmit = async (overrideCode?: string) => {
-    const cleanCode = (overrideCode || code).trim();
-    if (cleanCode.length < 2) return;
+    const cleanCode = (overrideCode || code).trim().toUpperCase();
+    if (!cleanCode) return;
     
     setLoading(true);
-    const result = await joinClass(cleanCode, user!.id);
-    setLoading(false);
-
-    if (result.success) {
-      showToast(language === 'ar' ? 'تم الانضمام بنجاح!' : 'Successfully joined class!');
-      onJoined();
-    } else {
-      setError(result.error || 'Something went wrong');
-      setShaking(true);
-      setTimeout(() => setShaking(false), 500);
+    setError('');
+    
+    try {
+      const result = await joinClass(cleanCode, user!.id);
+      if (result.success) {
+        showToast(language === 'ar' ? 'تم الانضمام بنجاح!' : 'Successfully joined class!');
+        onJoined();
+      } else {
+        setError(result.error || 'Something went wrong');
+        setShaking(true);
+        setTimeout(() => setShaking(false), 500);
+      }
+    } catch (err) {
+      setError('An unexpected error occurred');
+    } finally {
+      setLoading(false);
     }
   };
 

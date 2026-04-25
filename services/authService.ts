@@ -37,6 +37,7 @@ export const signUp = async (
       schoolCode: role === 'teacher' ? extraField : null,
       childStudentId: role === 'parent' ? extraField : null,
       createdAt: Date.now(),
+      classes: [],
     };
 
     await setDoc(doc(db, 'users', user.id), user);
